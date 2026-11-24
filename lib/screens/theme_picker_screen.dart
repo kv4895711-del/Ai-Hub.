@@ -162,7 +162,7 @@ class ThemePickerScreen extends StatelessWidget {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
               ),
               child: const Text(
-                theme_previewText,
+                'Looks great!',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
