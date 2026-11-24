@@ -10,6 +10,7 @@ import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_provider.dart';
 import '../widgets/aurora_background.dart';
+import '../widgets/chat_drawer.dart';
 import '../widgets/example_prompts.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/input_bar.dart';
@@ -18,7 +19,8 @@ import '../widgets/status_pill.dart';
 import 'settings_screen.dart';
 import 'setup_help_screen.dart';
 
-/// The main screen: top bar, the conversation, and the input bar at the bottom.
+/// Main screen: top bar, conversation, aur neeche input bar.
+/// Left menu (drawer) mein chats ki list hai.
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -28,8 +30,9 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scroll = ScrollController();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  /// True while the list is at (or near) the bottom, so new text keeps scrolling.
+  /// True jab list neeche (ya uske paas) ho, taaki naya text scroll karta rahe.
   bool _stick = true;
 
   String? _lastChatId;
@@ -76,7 +79,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  /// Decides, on every rebuild, whether the list should scroll down.
+  /// Har rebuild par decide karta hai ki list neeche scroll kare ya nahi.
   void _autoScroll(ChatProvider chat) {
     final messages = chat.messages;
     final count = messages.length;
@@ -88,9 +91,10 @@ class _ChatScreenState extends State<ChatScreen> {
       _scheduleScroll(jump: true);
     } else if (count != _lastCount) {
       final lastIsUser = messages.isNotEmpty && messages.last.isUser;
+      final justLoaded = _lastCount == 0 && count > 1;
       if (_stick || lastIsUser) {
         _stick = true;
-        _scheduleScroll();
+        _scheduleScroll(jump: justLoaded);
       }
     } else if (_stick && length != _lastLength) {
       _scheduleScroll(jump: true);
@@ -102,21 +106,27 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // ---------- Actions ----------
 
-  void _send(String text) {
+  void _send(String text, List<Map<String, dynamic>> attachments) {
     final settings = context.read<SettingsProvider>();
     if (!settings.hasKey) {
-      AppUtils.showSnack(context, 'Add your gateway key in Settings first.');
+      AppUtils.showSnack(context, 'Pehle Settings mein gateway key daalo.');
       return;
     }
     AppUtils.lightHaptic(settings.haptics);
     _stick = true;
-    context.read<ChatProvider>().sendMessage(text);
+    context.read<ChatProvider>().sendMessage(text, attachments: attachments);
   }
 
   void _newChat() {
     AppUtils.selectionHaptic(context.read<SettingsProvider>().haptics);
     _stick = true;
     context.read<ChatProvider>().newChat();
+  }
+
+  void _openDrawer() {
+    FocusScope.of(context).unfocus();
+    AppUtils.selectionHaptic(context.read<SettingsProvider>().haptics);
+    _scaffoldKey.currentState?.openDrawer();
   }
 
   void _openSettings() {
@@ -139,7 +149,9 @@ class _ChatScreenState extends State<ChatScreen> {
     _autoScroll(chat);
 
     return Scaffold(
+      key: _scaffoldKey,
       resizeToAvoidBottomInset: true,
+      drawer: const ChatDrawer(),
       body: AuroraBackground(
         child: SafeArea(
           bottom: false,
@@ -149,9 +161,7 @@ class _ChatScreenState extends State<ChatScreen> {
               Expanded(
                 child: Stack(
                   children: [
-                    chat.messages.isEmpty
-                        ? _buildEmptyState()
-                        : _buildMessageList(chat),
+                    _buildBody(chat),
                     Positioned(
                       right: 16,
                       bottom: 10,
@@ -173,6 +183,14 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  Widget _buildBody(ChatProvider chat) {
+    if (chat.messages.isNotEmpty) return _buildMessageList(chat);
+    if (chat.isLoadingMessages) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return _buildEmptyState();
+  }
+
   // ---------- Top bar ----------
 
   Widget _buildTopBar(ChatProvider chat) {
@@ -184,9 +202,9 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Row(
         children: [
           _GlassIconButton(
-            icon: Icons.edit_square,
-            tooltip: 'New chat',
-            onTap: _newChat,
+            icon: Icons.menu_rounded,
+            tooltip: 'Chats',
+            onTap: _openDrawer,
           ),
           Expanded(
             child: Column(
@@ -211,6 +229,12 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
           ),
+          _GlassIconButton(
+            icon: Icons.edit_square,
+            tooltip: 'Nayi chat',
+            onTap: _newChat,
+          ),
+          const SizedBox(width: 8),
           _GlassIconButton(
             icon: Icons.tune_rounded,
             tooltip: 'Settings',
@@ -250,7 +274,7 @@ class _ChatScreenState extends State<ChatScreen> {
       curve: Curves.easeOutBack,
       child: _GlassIconButton(
         icon: Icons.keyboard_arrow_down_rounded,
-        tooltip: 'Scroll to bottom',
+        tooltip: 'Neeche jao',
         onTap: () {
           _stick = true;
           _scheduleScroll();
@@ -328,7 +352,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
               const SizedBox(height: 26),
-              ExamplePrompts(onSelected: _send),
+              ExamplePrompts(onSelected: (text) => _send(text, const [])),
             ],
           ),
         ),
@@ -336,7 +360,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  // ---------- Banner (missing key / gateway offline) ----------
+  // ---------- Banner (key missing / gateway offline) ----------
 
   Widget _buildBanner() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -348,11 +372,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final accent = context.read<ThemeProvider>().accent;
 
     if (!hasKey) {
-      text = 'Add your gateway key to start chatting.';
+      text = 'Chat shuru karne ke liye gateway key daalo.';
       actions.add(
         TextButton(
           onPressed: _openSettings,
-          child: Text('Open Settings', style: TextStyle(color: accent)),
+          child: Text('Settings kholo', style: TextStyle(color: accent)),
         ),
       );
     } else if (gateway.status == GatewayStatus.offline ||
@@ -406,7 +430,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-/// A round glass button used in the top bar.
+/// Top bar ka gol glass button.
 class _GlassIconButton extends StatelessWidget {
   const _GlassIconButton({
     required this.icon,
