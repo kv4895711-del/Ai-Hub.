@@ -1,18 +1,23 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/utils.dart';
+import '../models/attachment.dart';
 import '../models/message.dart';
 import '../providers/settings_provider.dart';
+import '../services/voice_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/theme_provider.dart';
+import 'attachment_chip.dart';
 import 'glass_card.dart';
 import 'markdown_view.dart';
 import 'typing_indicator.dart';
 
-/// One message in the chat.
-/// - Your messages: a colored bubble on the right.
-/// - AI answers: a glass card on the left with Copy and Regenerate buttons.
+/// Chat ka ek message.
+/// - Tumhare messages: rang wala bubble right side par, attachments uske upar.
+/// - AI ke jawab: glass card left side par, Copy, Read aloud aur Regenerate ke saath.
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
@@ -23,13 +28,13 @@ class MessageBubble extends StatelessWidget {
 
   final ChatMessage message;
 
-  /// True only for the very last answer, so it can be asked again.
+  /// Sirf sabse aakhri jawab ke liye true, taaki use dobara pooch sako.
   final bool showRegenerate;
   final VoidCallback? onRegenerate;
 
   @override
   Widget build(BuildContext context) {
-    // Only brand-new messages slide in. Old ones just appear (so scrolling is calm).
+    // Sirf bilkul naye messages slide hote hain. Purane seedhe dikhte hain.
     final fresh = DateTime.now().difference(message.createdAt).inSeconds < 3;
 
     return TweenAnimationBuilder<double>(
@@ -54,7 +59,7 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  // ---------- Your message ----------
+  // ---------- Tumhara message ----------
 
   Widget _buildUserBubble(BuildContext context) {
     final accent = context.watch<ThemeProvider>().accent;
@@ -66,47 +71,48 @@ class MessageBubble extends StatelessWidget {
         .withLightness((hsl.lightness * 0.9).clamp(0.2, 0.8))
         .toColor();
 
+    final hasText = message.content.trim().isNotEmpty;
+    final hasFiles = message.hasAttachments;
+
     return Align(
       alignment: Alignment.centerRight,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: width * 0.82),
-        child: GestureDetector(
-          onLongPress: () {
-            AppUtils.mediumHaptic(haptics);
-            AppUtils.copyText(context, message.content);
-          },
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [accent, second],
-              ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(22),
-                topRight: Radius.circular(22),
-                bottomLeft: Radius.circular(22),
-                bottomRight: Radius.circular(6),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: accent.withValues(alpha: 0.30),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (message.hasAttachments) ...[
-                  _buildAttachmentList(),
-                  if (message.content.isNotEmpty) const SizedBox(height: 8),
-                ],
-                if (message.content.isNotEmpty)
-                  Text(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasFiles) _buildAttachmentChips(context),
+            if (hasFiles && hasText) const SizedBox(height: 6),
+            if (hasText)
+              GestureDetector(
+                onLongPress: () {
+                  AppUtils.mediumHaptic(haptics);
+                  AppUtils.copyText(context, message.content);
+                },
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [accent, second],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(22),
+                      topRight: Radius.circular(22),
+                      bottomLeft: Radius.circular(22),
+                      bottomRight: Radius.circular(6),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.30),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Text(
                     message.content,
                     style: const TextStyle(
                       color: Colors.white,
@@ -114,7 +120,60 @@ class MessageBubble extends StatelessWidget {
                       height: 1.4,
                     ),
                   ),
-              ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Message ke saath bheji gayi files ke chips (bubble ke upar).
+  Widget _buildAttachmentChips(BuildContext context) {
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final map in message.attachments)
+          Builder(
+            builder: (ctx) {
+              final a = Attachment.fromJson(map);
+              return AttachmentChip(
+                attachment: a,
+                onTap: a.isImage ? () => _openImage(ctx, a) : null,
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  /// Image par tap karne par bada preview.
+  void _openImage(BuildContext context, Attachment a) {
+    if (a.path.isEmpty) return;
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(12),
+        child: GestureDetector(
+          onTap: () => Navigator.of(ctx).pop(),
+          child: InteractiveViewer(
+            minScale: 0.8,
+            maxScale: 4,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.file(
+                File(a.path),
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Icon(Icons.broken_image_rounded,
+                      size: 48, color: Colors.white70),
+                ),
+              ),
             ),
           ),
         ),
@@ -122,53 +181,7 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  /// A simple list of the files that were sent with this message.
-  Widget _buildAttachmentList() {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (final a in message.attachments)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(_iconFor((a['type'] ?? 'file').toString()),
-                    size: 15, color: Colors.white),
-                const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 180),
-                  child: Text(
-                    (a['name'] ?? 'file').toString(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 12.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  IconData _iconFor(String type) {
-    switch (type) {
-      case 'image':
-        return Icons.image_rounded;
-      case 'video':
-        return Icons.videocam_rounded;
-      default:
-        return Icons.insert_drive_file_rounded;
-    }
-  }
-
-  // ---------- AI answer ----------
+  // ---------- AI ka jawab ----------
 
   Widget _buildAssistantBubble(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -266,6 +279,11 @@ class MessageBubble extends StatelessWidget {
   Widget _buildActions(BuildContext context, bool isDark, Color accent) {
     final haptics = context.read<SettingsProvider>().haptics;
     final secondary = AppTheme.textSecondary(isDark);
+    final canRead = !message.isError && message.content.trim().isNotEmpty;
+    final speaking = canRead &&
+        context.select<VoiceService, bool>(
+          (v) => v.isSpeakingId(message.id),
+        );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 4, 0, 0),
@@ -281,6 +299,15 @@ class MessageBubble extends StatelessWidget {
                 AppUtils.lightHaptic(haptics);
                 AppUtils.copyText(context, message.content);
               },
+            ),
+          if (canRead)
+            _ActionButton(
+              icon: speaking
+                  ? Icons.stop_circle_rounded
+                  : Icons.volume_up_rounded,
+              tooltip: speaking ? 'Rok do' : 'Padh kar sunao',
+              color: speaking ? accent : secondary,
+              onTap: () => _toggleReadAloud(context, haptics),
             ),
           if (showRegenerate && onRegenerate != null)
             _ActionButton(
@@ -301,9 +328,21 @@ class MessageBubble extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _toggleReadAloud(BuildContext context, bool haptics) async {
+    final voice = context.read<VoiceService>();
+    AppUtils.lightHaptic(haptics);
+    await voice.speak(message.content, id: message.id);
+
+    final err = voice.error;
+    if (err != null && err.isNotEmpty && context.mounted) {
+      voice.clearError();
+      AppUtils.showSnack(context, err);
+    }
+  }
 }
 
-/// A small round icon button under an answer.
+/// Jawab ke neeche ka chhota gol icon button.
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.icon,
