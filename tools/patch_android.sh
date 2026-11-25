@@ -66,10 +66,11 @@ for f in android/app/build.gradle.kts android/app/build.gradle; do
   fi
 done
 
-echo "==> Making every plugin compile against Android API 36 or higher"
-# Kuch plugins (jaise file_picker) API 34 par bane hain, lekin lifecycle
-# library ko API 36 chahiye. Ye Gradle "init script" build shuru hone se
-# pehle har project ka compileSdk 36 kar deti hai.
+echo "==> Gradle init script (compileSdk 36 + lint band)"
+# 1) Kuch plugins (jaise file_picker) API 34 par bane hain, lekin lifecycle
+#    library ko API 36 chahiye. Har module ka compileSdk 36 kar dete hain.
+# 2) Plugins ka "lint" check (jaise image_picker_android) Java 17 par crash
+#    hota hai. APK banane ke liye ye zaroori nahi, isliye band kar dete hain.
 INIT_DIR="$HOME/.gradle/init.d"
 mkdir -p "$INIT_DIR"
 cat > "$INIT_DIR/ai_hub_compile_sdk.gradle" <<'GRADLE'
@@ -99,6 +100,15 @@ gradle.projectsLoaded { g ->
                     println 'AI Hub: could not raise compileSdk for ' + proj.path
                 }
             }
+        }
+    }
+}
+
+// AI Hub: lint tasks band (lint tool Java 17 par crash ho raha hai).
+gradle.taskGraph.whenReady { graph ->
+    graph.allTasks.each { t ->
+        if (t.name.startsWith('lint')) {
+            t.enabled = false
         }
     }
 }
