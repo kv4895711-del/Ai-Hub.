@@ -3,8 +3,8 @@ class AppConstants {
   AppConstants._();
 
   // ---- Identity ----
-  static const String appName = 'AI Hub';
-  static const String appTagline = 'All your free AI models, one app';
+  static const String appName = 'Orbit';
+  static const String appTagline = 'Many AI models. One app.';
 
   // ---- Gateway (FreeLLMAPI running in Termux) ----
   static const String gatewayRoot = 'http://localhost:3001';
@@ -28,15 +28,35 @@ class AppConstants {
   static const String keyHaptics = 'haptics';
   static const String keyAutoStart = 'auto_start_gateway';
   static const String keyLastModel = 'last_model';
+
+  // Theme
   static const String keyThemeMode = 'theme_mode';
   static const String keyPresetId = 'theme_preset';
   static const String keyCustomAccent = 'theme_custom_accent';
+  static const String keyThemePalette = 'theme_palette'; // up to 4 colors
+  static const String keyWallpaperType = 'wallpaper_type'; // none | builtin | gallery
+  static const String keyWallpaperRef = 'wallpaper_ref'; // built-in id or file path
+  static const String keyWallpaperDim = 'wallpaper_dim'; // 0.0 to 0.8
+
+  // First-time setup
+  static const String keySetupDone = 'setup_done';
+  static const String keySetupHintHidden = 'setup_hint_hidden';
+
+  // Profile (kept only on this phone)
+  static const String keyProfileName = 'profile_name';
+  static const String keyProfilePhoto = 'profile_photo';
+  static const String keyPinEnabled = 'pin_enabled';
+  static const String keyPinHash = 'pin_hash';
 
   // ---- Chat ----
   static const String newChatTitle = 'New chat';
   static const int maxTitleLength = 40;
   static const double minFontScale = 0.85;
   static const double maxFontScale = 1.4;
+
+  // ---- Theme limits ----
+  static const int maxPaletteColors = 4;
+  static const double maxWallpaperDim = 0.8;
 
   // ---- Example prompts shown on an empty chat ----
   static const List<String> examplePrompts = [
