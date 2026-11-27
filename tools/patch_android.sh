@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Applies AI Hub's Android settings after "flutter create" has made the android folder.
+# Applies Orbit's Android settings after "flutter create" has made the android folder.
 # Safe to run more than once.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+APP_NAME="Orbit"
 
 MANIFEST="android/app/src/main/AndroidManifest.xml"
 if [ ! -f "$MANIFEST" ]; then
@@ -13,10 +15,12 @@ if [ ! -f "$MANIFEST" ]; then
 fi
 
 echo "==> Patching AndroidManifest.xml"
-python3 - "$MANIFEST" <<'PY'
+python3 - "$MANIFEST" "$APP_NAME" <<'PY'
+import re
 import sys
 
 path = sys.argv[1]
+app_name = sys.argv[2]
 text = open(path, encoding="utf-8").read()
 
 # 1) Allow plain http (our gateway is http://localhost:3001)
@@ -28,7 +32,7 @@ if "android:usesCleartextTraffic" not in text:
     )
 
 # 2) App name shown under the icon
-text = text.replace('android:label="ai_hub"', 'android:label="AI Hub"')
+text = re.sub(r'android:label="[^"]*"', 'android:label="%s"' % app_name, text, count=1)
 
 # 3) Permissions and <queries> (only once)
 if "com.termux.permission.RUN_COMMAND" not in text:
@@ -65,55 +69,6 @@ for f in android/app/build.gradle.kts android/app/build.gradle; do
     echo "Patched $f"
   fi
 done
-
-echo "==> Gradle init script (compileSdk 36 + lint band)"
-# 1) Kuch plugins (jaise file_picker) API 34 par bane hain, lekin lifecycle
-#    library ko API 36 chahiye. Har module ka compileSdk 36 kar dete hain.
-# 2) Plugins ka "lint" check (jaise image_picker_android) Java 17 par crash
-#    hota hai. APK banane ke liye ye zaroori nahi, isliye band kar dete hain.
-INIT_DIR="$HOME/.gradle/init.d"
-mkdir -p "$INIT_DIR"
-cat > "$INIT_DIR/ai_hub_compile_sdk.gradle" <<'GRADLE'
-// AI Hub: make every Android module compile against API 36 or higher.
-gradle.projectsLoaded { g ->
-    g.rootProject.allprojects { p ->
-        p.afterEvaluate { proj ->
-            def android = proj.extensions.findByName('android')
-            if (android == null) return
-
-            int current = 0
-            try {
-                def text = android.compileSdkVersion == null ? '' : android.compileSdkVersion.toString()
-                def m = (text =~ /(\d+)/)
-                if (m.find()) current = m.group(1) as int
-            } catch (Throwable ignored) {
-                current = 0
-            }
-            if (current >= 36) return
-
-            try {
-                android.compileSdkVersion(36)
-            } catch (Throwable first) {
-                try {
-                    android.compileSdk = 36
-                } catch (Throwable second) {
-                    println 'AI Hub: could not raise compileSdk for ' + proj.path
-                }
-            }
-        }
-    }
-}
-
-// AI Hub: lint tasks band (lint tool Java 17 par crash ho raha hai).
-gradle.taskGraph.whenReady { graph ->
-    graph.allTasks.each { t ->
-        if (t.name.startsWith('lint')) {
-            t.enabled = false
-        }
-    }
-}
-GRADLE
-echo "Wrote $INIT_DIR/ai_hub_compile_sdk.gradle"
 
 echo "==> Installing our MainActivity (Termux launcher code)"
 MAIN="$(find android/app/src/main -name 'MainActivity.kt' | head -n 1)"
