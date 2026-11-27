@@ -1,4 +1,4 @@
-name: Build AI Hub APK
+name: Build Orbit APK
 
 on:
   push:
@@ -34,16 +34,25 @@ jobs:
           flutter --version
           java -version
 
+      - name: Check the icon images are there
+        run: |
+          ls -l assets/icon
+          test -f assets/icon/orbit_icon.png
+          test -f assets/icon/orbit_icon_foreground.png
+
       - name: Create the Android project files
         run: |
           flutter create --platforms=android --org com.aihub --project-name ai_hub .
           rm -rf test
 
-      - name: Apply our Android settings (permissions, Termux code)
+      - name: Apply our Android settings (name, permissions, Termux code)
         run: bash tools/patch_android.sh
 
       - name: Get packages
         run: flutter pub get
+
+      - name: Make the app icon
+        run: dart run flutter_launcher_icons
 
       - name: Build the APK
         run: flutter build apk --release
@@ -51,6 +60,6 @@ jobs:
       - name: Upload the APK
         uses: actions/upload-artifact@v4
         with:
-          name: ai-hub-apk
+          name: orbit-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
