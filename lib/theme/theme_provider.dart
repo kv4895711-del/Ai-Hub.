@@ -4,88 +4,99 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import 'theme_presets.dart';
 
-/// Holds the chosen theme (light/dark/system, color preset, custom color)
-/// and remembers it between app launches.
-class ThemeProvider extends ChangeNotifier {
-  ThemeMode _mode = ThemeMode.dark;
-  String _presetId = ThemePresets.defaultId;
-  Color? _customAccent;
-
-  ThemeMode get mode => _mode;
-  String get presetId => _presetId;
-  Color? get customAccent => _customAccent;
-
-  /// True when the user picked their own color instead of a preset.
-  bool get isCustom => _presetId == ThemePresets.customId && _customAccent != null;
-
-  /// The active theme (preset or custom).
-  ThemePreset get preset {
-    if (isCustom) return ThemePresets.fromAccent(_customAccent!);
-    return ThemePresets.byId(_presetId);
+/// Orbit's look is black and white only. The user can choose Dark, Light or
+/// System, and the choice is remembered between launches.
+///
+/// The old color-theme names (preset, customAccent, setPreset...) are kept so
+/// the older screens still compile. They do nothing now and disappear when
+/// those screens are replaced.
+class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
+  ThemeProvider() {
+    WidgetsBinding.instance.addObserver(this);
   }
 
-  Color get accent => preset.accent;
-  List<Color> get auroraColors => preset.aurora;
+  ThemeMode _mode = ThemeMode.dark;
 
-  // ---------- Load / save ----------
+  ThemeMode get mode => _mode;
+
+  // ---------- Dark or light right now ----------
+
+  /// True when the app is showing its dark look (also resolves "System").
+  bool get isDark {
+    switch (_mode) {
+      case ThemeMode.dark:
+        return true;
+      case ThemeMode.light:
+        return false;
+      case ThemeMode.system:
+        return WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.dark;
+    }
+  }
+
+  /// The main "ink" color: near-white on dark, near-black on light.
+  Color get accent =>
+      isDark ? const Color(0xFFF5F5F5) : const Color(0xFF0A0A0A);
+
+  /// Three greys used by the soft background glow.
+  List<Color> get auroraColors => isDark
+      ? const [Color(0xFF2B2B2B), Color(0xFF111111), Color(0xFF444444)]
+      : const [Color(0xFFE6E6E6), Color(0xFFF8F8F8), Color(0xFFCFCFCF)];
+
+  // ---------- Kept for older screens (they do nothing new) ----------
+
+  String get presetId => 'mono';
+  bool get isCustom => false;
+  Color? get customAccent => null;
+
+  ThemePreset get preset => ThemePreset(
+        id: 'mono',
+        name: 'Black & White',
+        accent: accent,
+        aurora: auroraColors,
+      );
+
+  Future<void> setPreset(String id) async {}
+
+  Future<void> setCustomAccent(Color color) async {}
+
+  // ---------- Follow the phone when "System" is chosen ----------
+
+  @override
+  void didChangePlatformBrightness() {
+    if (_mode == ThemeMode.system) notifyListeners();
+  }
+
+  // ---------- Load and save ----------
 
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-
-      final modeName = prefs.getString(AppConstants.keyThemeMode);
+      final name = prefs.getString(AppConstants.keyThemeMode);
       _mode = ThemeMode.values.firstWhere(
-        (m) => m.name == modeName,
+        (m) => m.name == name,
         orElse: () => ThemeMode.dark,
       );
-
-      _presetId = prefs.getString(AppConstants.keyPresetId) ?? ThemePresets.defaultId;
-
-      final customValue = prefs.getInt(AppConstants.keyCustomAccent);
-      if (customValue != null) {
-        _customAccent = Color(customValue);
-      }
-      if (_presetId == ThemePresets.customId && _customAccent == null) {
-        _presetId = ThemePresets.defaultId;
-      }
     } catch (_) {
-      // If saved settings cannot be read, just use the defaults.
+      // If the saved choice cannot be read, stay on Dark.
     }
   }
-
-  Future<void> _save() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(AppConstants.keyThemeMode, _mode.name);
-      await prefs.setString(AppConstants.keyPresetId, _presetId);
-      if (_customAccent != null) {
-        await prefs.setInt(AppConstants.keyCustomAccent, _customAccent!.toARGB32());
-      }
-    } catch (_) {
-      // Saving is best-effort.
-    }
-  }
-
-  // ---------- Changes ----------
 
   Future<void> setMode(ThemeMode mode) async {
     if (_mode == mode) return;
     _mode = mode;
     notifyListeners();
-    await _save();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(AppConstants.keyThemeMode, mode.name);
+    } catch (_) {
+      // Saving is best-effort.
+    }
   }
 
-  Future<void> setPreset(String id) async {
-    _presetId = id;
-    notifyListeners();
-    await _save();
-  }
-
-  /// Uses any color the user picks as the accent for the whole app.
-  Future<void> setCustomAccent(Color color) async {
-    _customAccent = color;
-    _presetId = ThemePresets.customId;
-    notifyListeners();
-    await _save();
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 }
