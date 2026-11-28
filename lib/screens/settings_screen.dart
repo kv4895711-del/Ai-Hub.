@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants.dart';
 import '../core/utils.dart';
+import '../providers/chat_provider.dart';
 import '../providers/gateway_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
@@ -12,6 +13,7 @@ import '../theme/app_theme.dart';
 import '../theme/theme_provider.dart';
 import '../widgets/aurora_background.dart';
 import '../widgets/glass_card.dart';
+import 'memory_screen.dart';
 import 'setup_help_screen.dart';
 
 /// Settings: gateway address and key, connection test, appearance, haptics.
@@ -124,6 +126,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AppUtils.showSnack(context, gateway.message);
   }
 
+  void _openMemory() {
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(builder: (_) => const MemoryScreen()),
+    );
+  }
+
   void _openHelp() {
     Navigator.of(context).push(
       CupertinoPageRoute<void>(builder: (_) => const SetupHelpScreen()),
@@ -156,6 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       _buildGatewaySection(isDark),
                       _buildBehaviorSection(isDark, settings),
+                      _buildMemorySection(isDark),
                       _buildAppearanceSection(isDark, settings, theme),
                       _buildAboutSection(isDark),
                     ],
@@ -413,6 +422,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Setup help'),
         trailing: const Icon(Icons.chevron_right_rounded),
         onTap: _openHelp,
+      ),
+    ]);
+  }
+
+  // ---------- Memory ----------
+
+  Widget _buildMemorySection(bool isDark) {
+    final memory = context.read<ChatProvider>().memory;
+    return _section(isDark, 'Memory', [
+      ListenableBuilder(
+        listenable: memory,
+        builder: (context, _) => ListTile(
+          leading: const Icon(Icons.memory_rounded),
+          title: const Text('Memory'),
+          subtitle: Text(
+            memory.enabled
+                ? '${memory.count} notes saved on this phone'
+                : 'Off. ${memory.count} notes saved',
+          ),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: _openMemory,
+        ),
       ),
     ]);
   }
