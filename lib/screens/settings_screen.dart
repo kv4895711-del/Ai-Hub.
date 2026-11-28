@@ -13,7 +13,6 @@ import '../theme/theme_provider.dart';
 import '../widgets/aurora_background.dart';
 import '../widgets/glass_card.dart';
 import 'setup_help_screen.dart';
-import 'theme_picker_screen.dart';
 
 /// Settings: gateway address and key, connection test, appearance, haptics.
 class SettingsScreen extends StatefulWidget {
@@ -125,12 +124,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     AppUtils.showSnack(context, gateway.message);
   }
 
-  void _openThemePicker() {
-    Navigator.of(context).push(
-      CupertinoPageRoute<void>(builder: (_) => const ThemePickerScreen()),
-    );
-  }
-
   void _openHelp() {
     Navigator.of(context).push(
       CupertinoPageRoute<void>(builder: (_) => const SetupHelpScreen()),
@@ -161,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 6, 16, 40),
                     children: [
-                      _buildGatewaySection(isDark, theme),
+                      _buildGatewaySection(isDark),
                       _buildBehaviorSection(isDark, settings),
                       _buildAppearanceSection(isDark, settings, theme),
                       _buildAboutSection(isDark),
@@ -251,8 +244,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ---------- Gateway ----------
 
-  Widget _buildGatewaySection(bool isDark, ThemeProvider theme) {
+  Widget _buildGatewaySection(bool isDark) {
     final secondary = AppTheme.textSecondary(isDark);
+    final ink = AppTheme.accentFor(isDark);
+    final onInk = AppTheme.onAccentFor(isDark);
 
     return _section(isDark, 'Gateway', [
       Padding(
@@ -336,20 +331,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: FilledButton.icon(
                 onPressed: _testing ? null : _testConnection,
                 style: FilledButton.styleFrom(
-                  backgroundColor: theme.accent,
-                  foregroundColor: Colors.white,
+                  backgroundColor: ink,
+                  foregroundColor: onInk,
+                  disabledBackgroundColor: ink.withValues(alpha: 0.35),
+                  disabledForegroundColor: onInk.withValues(alpha: 0.8),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
                 icon: _testing
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: onInk,
                         ),
                       )
                     : const Icon(Icons.wifi_tethering_rounded, size: 20),
@@ -427,7 +424,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     SettingsProvider settings,
     ThemeProvider theme,
   ) {
-    final accent = theme.accent;
+    final ink = AppTheme.accentFor(isDark);
+    final onInk = AppTheme.onAccentFor(isDark);
     final primary = AppTheme.textPrimary(isDark);
 
     Widget segment(String label, ThemeMode mode) {
@@ -439,7 +437,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : primary,
+            color: selected ? onInk : primary,
           ),
         ),
       );
@@ -452,8 +450,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           width: double.infinity,
           child: CupertinoSlidingSegmentedControl<ThemeMode>(
             groupValue: theme.mode,
-            thumbColor: accent,
-            backgroundColor: Colors.white.withValues(alpha: isDark ? 0.10 : 0.55),
+            thumbColor: ink,
+            backgroundColor: isDark
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.black.withValues(alpha: 0.06),
             children: {
               ThemeMode.system: segment('System', ThemeMode.system),
               ThemeMode.light: segment('Light', ThemeMode.light),
@@ -464,21 +464,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
         ),
-      ),
-      _divider(),
-      ListTile(
-        leading: Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(colors: [accent, theme.auroraColors[1]]),
-          ),
-        ),
-        title: const Text('Color theme'),
-        subtitle: Text(theme.preset.name),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: _openThemePicker,
       ),
       _divider(),
       Padding(
@@ -492,7 +477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(
                 fontSize: 16 * settings.fontScale,
                 fontWeight: FontWeight.w600,
-                color: accent,
+                color: ink,
               ),
             ),
           ],
@@ -528,9 +513,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
         child: Text(
-          'AI Hub talks to the FreeLLMAPI gateway on this phone. Free models '
-          'have rate limits, so a reply can stop sometimes. Your key never '
-          'leaves your phone except to reach your own gateway.',
+          '${AppConstants.appName} talks to the FreeLLMAPI gateway on this '
+          'phone. Free models have rate limits, so a reply can stop '
+          'sometimes. Your key never leaves your phone except to reach your '
+          'own gateway.',
           style: TextStyle(
             fontSize: 12.5,
             height: 1.4,
