@@ -235,7 +235,7 @@ class _InputBarState extends State<InputBar> {
                         onText: _onVoiceText,
                       ),
                     ),
-                  _buildActionButton(),
+                  _buildActionButton(isDark),
                 ],
               ),
             ],
@@ -329,8 +329,11 @@ class _InputBarState extends State<InputBar> {
     );
   }
 
-  Widget _buildActionButton() {
-    final accent = context.watch<ThemeProvider>().accent;
+  /// Send / Stop button: ink-colored circle (white on dark, black on light)
+  /// with an icon in the opposite color.
+  Widget _buildActionButton(bool isDark) {
+    final accent = AppTheme.accentFor(isDark);
+    final onAccent = AppTheme.onAccentFor(isDark);
     final generating = widget.isGenerating;
     final enabled = generating || _canSend;
 
@@ -352,19 +355,10 @@ class _InputBarState extends State<InputBar> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: enabled ? accent : accent.withValues(alpha: 0.30),
-              boxShadow: enabled
-                  ? [
-                      BoxShadow(
-                        color: accent.withValues(alpha: 0.40),
-                        blurRadius: 14,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : const [],
             ),
             child: Icon(
               generating ? Icons.stop_rounded : Icons.arrow_upward_rounded,
-              color: Colors.white,
+              color: onAccent,
               size: 24,
             ),
           ),
