@@ -2,16 +2,18 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/chat.dart';
+import '../models/memory_item.dart';
 import '../models/message.dart';
 
 /// Saves chats and messages on the phone (SQLite).
 /// Messages are linked to their chat, so deleting a chat deletes its messages too.
 class DatabaseService {
   static const String _dbName = 'ai_hub.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
 
   static const String _chatsTable = 'chats';
   static const String _messagesTable = 'messages';
+  static const String _memoryTable = 'memory_items';
 
   Future<Database>? _opening;
 
@@ -58,7 +60,34 @@ class DatabaseService {
         await db.execute(
           'CREATE INDEX idx_messages_chat ON $_messagesTable (chat_id, created_at)',
         );
+        await _createMemoryTable(db);
       },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        // Purani chats ko haath nahi lagate: sirf naya memory table jodte hain.
+        if (oldVersion < 2) {
+          await _createMemoryTable(db);
+        }
+      },
+    );
+  }
+
+  static Future<void> _createMemoryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_memoryTable (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL DEFAULT 'note',
+        title TEXT NOT NULL DEFAULT '',
+        text TEXT NOT NULL,
+        concepts TEXT NOT NULL DEFAULT '[]',
+        source TEXT NOT NULL DEFAULT 'manual',
+        chat_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_memory_updated '
+      'ON $_memoryTable (updated_at)',
     );
   }
 
@@ -195,6 +224,41 @@ class DatabaseService {
         .replaceAll(r'\', r'\\')
         .replaceAll('%', r'\%')
         .replaceAll('_', r'\_');
+  }
+
+  // ---------- Memory ----------
+
+  /// Saare memory notes, sabse naya pehle.
+  Future<List<MemoryItem>> getMemories() async {
+    final db = await _database();
+    final rows = await db.query(_memoryTable, orderBy: 'updated_at DESC');
+    return rows.map(MemoryItem.fromMap).toList();
+  }
+
+  /// Note jodta hai, ya wahi id pehle se ho to badal deta hai.
+  Future<void> saveMemory(MemoryItem item) async {
+    final db = await _database();
+    await db.insert(
+      _memoryTable,
+      item.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deleteMemories(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final db = await _database();
+    const chunk = 400; // SQLite ek baar mein limited "?" leta hai
+    for (var i = 0; i < ids.length; i += chunk) {
+      final part = ids.sublist(i, i + chunk > ids.length ? ids.length : i + chunk);
+      final marks = List.filled(part.length, '?').join(',');
+      await db.delete(_memoryTable, where: 'id IN ($marks)', whereArgs: part);
+    }
+  }
+
+  Future<void> deleteAllMemories() async {
+    final db = await _database();
+    await db.delete(_memoryTable);
   }
 
   Future<void> close() async {
