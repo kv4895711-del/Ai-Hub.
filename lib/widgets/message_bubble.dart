@@ -9,14 +9,13 @@ import '../models/message.dart';
 import '../providers/settings_provider.dart';
 import '../services/voice_service.dart';
 import '../theme/app_theme.dart';
-import '../theme/theme_provider.dart';
 import 'attachment_chip.dart';
 import 'glass_card.dart';
 import 'markdown_view.dart';
 import 'typing_indicator.dart';
 
 /// Chat ka ek message.
-/// - Tumhare messages: rang wala bubble right side par, attachments uske upar.
+/// - Tumhare messages: ink-color bubble right side par (Dark mein safed, Light mein kaala).
 /// - AI ke jawab: glass card left side par, Copy, Read aloud aur Regenerate ke saath.
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
@@ -62,14 +61,11 @@ class MessageBubble extends StatelessWidget {
   // ---------- Tumhara message ----------
 
   Widget _buildUserBubble(BuildContext context) {
-    final accent = context.watch<ThemeProvider>().accent;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bubbleColor = AppTheme.accentFor(isDark);
+    final textColor = AppTheme.onAccentFor(isDark);
     final haptics = context.read<SettingsProvider>().haptics;
     final width = MediaQuery.of(context).size.width;
-    final hsl = HSLColor.fromColor(accent);
-    final second = hsl
-        .withHue((hsl.hue + 28) % 360)
-        .withLightness((hsl.lightness * 0.9).clamp(0.2, 0.8))
-        .toColor();
 
     final hasText = message.content.trim().isNotEmpty;
     final hasFiles = message.hasAttachments;
@@ -93,29 +89,18 @@ class MessageBubble extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [accent, second],
-                    ),
+                    color: bubbleColor,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(22),
                       topRight: Radius.circular(22),
                       bottomLeft: Radius.circular(22),
                       bottomRight: Radius.circular(6),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: accent.withValues(alpha: 0.30),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
                   ),
                   child: Text(
                     message.content,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: textColor,
                       fontSize: 15.5,
                       height: 1.4,
                     ),
@@ -185,7 +170,7 @@ class MessageBubble extends StatelessWidget {
 
   Widget _buildAssistantBubble(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accent = context.watch<ThemeProvider>().accent;
+    final accent = AppTheme.accentFor(isDark);
     final width = MediaQuery.of(context).size.width;
 
     return Align(
@@ -221,8 +206,11 @@ class MessageBubble extends StatelessWidget {
             width: 20,
             height: 20,
             decoration: BoxDecoration(shape: BoxShape.circle, color: accent),
-            child: const Icon(Icons.auto_awesome_rounded,
-                size: 12, color: Colors.white),
+            child: Icon(
+              Icons.auto_awesome_rounded,
+              size: 12,
+              color: AppTheme.onAccentFor(isDark),
+            ),
           ),
           if (name.isNotEmpty) ...[
             const SizedBox(width: 8),
