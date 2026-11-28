@@ -9,6 +9,7 @@ import '../models/chat.dart';
 import '../models/message.dart';
 import '../services/api_service.dart';
 import '../services/database_service.dart';
+import '../services/memory_service.dart';
 import 'settings_provider.dart';
 
 /// Chat screen ka dimaag: chats aur messages sambhalta hai, gateway ko
@@ -21,6 +22,10 @@ class ChatProvider extends ChangeNotifier {
   final SettingsProvider _settings;
   final DatabaseService _db;
   final ApiService _api;
+
+  /// Phone mein save hone wali yaaddasht (Memory screen yahin se lega).
+  late final MemoryService _memory = MemoryService(_db);
+  MemoryService get memory => _memory;
 
   static const Uuid _uuid = Uuid();
 
@@ -97,6 +102,7 @@ class ChatProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('ChatProvider.load error: $e');
     }
+    await _memory.load();
     _loaded = true;
     notifyListeners();
   }
@@ -254,6 +260,13 @@ class ChatProvider extends ChangeNotifier {
     });
 
     notifyListeners();
+
+    // "yaad rakho: ..." likha ho to memory mein save karo. Note memory list
+    // mein turant jud jaata hai, isliye isi message ke jawab mein bhi dikhega.
+    unawaited(
+      _memory.saveFromChat(clean, chatId: chatId).catchError((_) => false),
+    );
+
     await _generate(chatId);
   }
 
@@ -326,8 +339,10 @@ class ChatProvider extends ChangeNotifier {
     ApiException? failure;
 
     try {
-      final apiMessages =
-          await _api.buildMessages(history, systemPrompt: _systemPrompt);
+      final apiMessages = await _api.buildMessages(
+        history,
+        systemPrompt: _promptWithMemory(history),
+      );
 
       try {
         await for (final piece in _api.streamChat(
@@ -382,6 +397,19 @@ class ChatProvider extends ChangeNotifier {
     _generating = false;
     _stopRequested = false;
     notifyListeners();
+  }
+
+  /// System prompt, aur memory ON ho to user ke saved notes ka chhota hissa.
+  String _promptWithMemory(List<ChatMessage> history) {
+    var lastUser = '';
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (history[i].isUser) {
+        lastUser = history[i].content;
+        break;
+      }
+    }
+    final context = _memory.buildContext(lastUser);
+    return context.isEmpty ? _systemPrompt : '$_systemPrompt\n\n$context';
   }
 
   /// Naya text "likhe ja rahe" jawab mein daalta hai.
@@ -511,6 +539,7 @@ class ChatProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _memory.dispose();
     _api.cancel();
     _queue.then((_) async {
       try {
